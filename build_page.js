@@ -277,7 +277,9 @@ syncBtn.addEventListener('click', () => {
     return;
   }
   const title = 'Sync tracker deletes (' + (toAdd.length + toRemove.length) + ' change' + (toAdd.length + toRemove.length === 1 ? '' : 's') + ')';
-  const body = ['Action: bulk-sync-deletes', 'Add: ' + toAdd.join('|'), 'Remove: ' + toRemove.join('|')].join('\\n');
+  // ';;' (not comma) because a company name can itself contain a comma
+  // (e.g. "aspire, jordan"), which would corrupt a comma-joined key list.
+  const body = ['Action: batch-delete-restore', 'Delete keys: ' + toAdd.join(';;'), 'Restore keys: ' + toRemove.join(';;')].join('\\n');
   const qs = 'title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body) + '&labels=claude-action';
   window.open('https://github.com/' + REPO + '/issues/new?' + qs, '_blank', 'noopener');
 });
