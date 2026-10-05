@@ -31,7 +31,8 @@ const displayRows = Array.from(latestByKey.values());
 // Durable, cross-device deletes: a job key listed here is baked as deleted
 // directly into the HTML at build time, so it stays hidden in a private
 // window or on another device — not dependent on any one browser's
-// localStorage. Edited via chat, then committed.
+// localStorage. Updated by process-tracker-actions after the page's "Sync
+// deletes to GitHub" button files a batch-delete-restore issue.
 let bakedDeleted = new Set();
 try {
   bakedDeleted = new Set(
@@ -115,16 +116,16 @@ const actions = r => {
   if (lp) {
     btns.push(`<button class="act" data-act="copy-letter" data-letter="${esc(lp)}">Copy cover letter</button>`);
   }
-  // Delete/restore hides the row instantly in this browser (localStorage,
-  // via the click handler below, before the link navigates) AND files the
-  // same kind of issue, so process-tracker-actions makes it permanent
-  // (edits deleted-keys.txt, commits, pushes) — durable across private
-  // windows and other devices, not just this one.
-  btns.push(`<a class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}" href="${esc(issueUrl('delete', r))}" target="_blank" rel="noopener" title="Hides it now; files a GitHub issue to make it permanent">Delete</a>`);
-  btns.push(`<a class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}" href="${esc(issueUrl('restore', r))}" target="_blank" rel="noopener" title="Unhides it now; files a GitHub issue to make it permanent">Restore</a>`);
+  // Delete/restore is instant and purely local (localStorage) — no redirect,
+  // no new tab, just hides/shows the row right away. There is a separate
+  // page-level "Sync deletes to GitHub" button (in the filter bar) for
+  // making the current set of local changes durable across private windows
+  // and other devices, batched into one issue instead of one per click.
+  btns.push(`<button class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}">Delete</button>`);
+  btns.push(`<button class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}">Restore</button>`);
   return btns.join(' ');
 };
-const tr = r => `<tr data-day="${r.date === today ? 'today' : 'old'}" data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-key="${esc(dedupeKey(r))}" data-deleted="${bakedDeleted.has(dedupeKey(r)) ? 'true' : 'false'}" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
+const tr = r => `<tr data-day="${r.date === today ? 'today' : 'old'}" data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-key="${esc(dedupeKey(r))}" data-baked="${bakedDeleted.has(dedupeKey(r)) ? 'true' : 'false'}" data-deleted="${bakedDeleted.has(dedupeKey(r)) ? 'true' : 'false'}" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
 <td data-label="Company">${esc(r.company)}</td><td data-label="Job">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}</td>
 <td data-label="Location">${esc(r.location)}</td><td data-label="Method">${esc(r.method)}</td><td class="m" data-label="Matched CV points">${esc(r.matched)}</td><td data-label="Status">${badge(r.status)}</td><td class="act-cell" data-label="Actions"><div class="act-wrap">${actions(r)}</div></td></tr>`;
 
@@ -199,7 +200,7 @@ footer{margin-top:20px;font-size:12px;opacity:.6}
 <div class="stat"><b>${count(s => !isApplied(s) && !isAttention(s))}</b>skipped</div>
 <div class="stat"><b>${todayRows.length}</b>reviewed today</div>
 </div>
-<div class="bar"><input id="q" placeholder="Search company, title, location..."><select id="f"><option value="">All statuses</option><option value="applied">Applied</option><option value="attention">Needs attention</option><option value="skipped">Skipped</option><option value="deleted">Deleted</option></select><select id="d"><option value="all">All runs</option><option value="today">Today</option></select></div>
+<div class="bar"><input id="q" placeholder="Search company, title, location..."><select id="f"><option value="">All statuses</option><option value="applied">Applied</option><option value="attention">Needs attention</option><option value="skipped">Skipped</option><option value="deleted">Deleted</option></select><select id="d"><option value="all">All runs</option><option value="today">Today</option></select><button id="sync" class="act" style="display:none;width:auto">Sync deletes to GitHub</button></div>
 <div class="tw"><table><colgroup><col class="c-company"><col class="c-job"><col class="c-loc"><col class="c-method"><col class="c-matched"><col class="c-status"><col class="c-act"></colgroup><thead><tr><th>Company</th><th>Job</th><th>Location</th><th>Method</th><th>Matched CV points</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody id="t">${displayRows.slice().reverse().map(tr).join('\n') || '<tr><td colspan="7">No applications logged yet.</td></tr>'}</tbody></table></div>
 <footer>Generated by build_page.js from applications-log.md. Rebuilt daily.</footer>
@@ -208,21 +209,31 @@ footer{margin-top:20px;font-size:12px;opacity:.6}
 const LETTERS = ${JSON.stringify(letterContents).replace(/</g, '\\u003c')};
 const q=document.getElementById('q'),f=document.getElementById('f'),d=document.getElementById('d');
 
-// Each row's data-deleted starts from deleted-keys.txt, baked in at build
-// time (durable, same on every device/browser). localStorage only adds
-// *instant* local hides on top of that, for the gap before a delete prompt
-// gets pasted to Claude Code and actually committed — it can mark a row
-// deleted early, but it can never un-delete one the build already baked in.
-const DELETED_KEY = 'jobTrackerDeletedKeys';
-function loadDeleted(){ try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); } catch { return new Set(); } }
-function saveDeleted(set){ try { localStorage.setItem(DELETED_KEY, JSON.stringify([...set])); } catch {} }
-let deletedKeys = loadDeleted();
+// Delete/Restore are instant and purely local (localStorage) — clicking
+// never leaves this page. Two sets track what's pending sync: deletedKeys
+// (rows hidden here that the build hasn't baked as deleted yet) and
+// restoreKeys (rows the build baked as deleted that should come back).
+// data-baked is the server-rendered truth from the last build; data-deleted
+// is the live, locally-adjusted state actually used for filtering.
+const DELETED_KEY = 'jobTrackerDeletedKeys', RESTORE_KEY = 'jobTrackerRestoreKeys';
+function loadSet(k){ try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch { return new Set(); } }
+function saveSet(k, set){ try { localStorage.setItem(k, JSON.stringify([...set])); } catch {} }
+let deletedKeys = loadSet(DELETED_KEY);
+let restoreKeys = loadSet(RESTORE_KEY);
+const syncBtn = document.getElementById('sync');
+function updateSyncButton(){
+  const n = deletedKeys.size + restoreKeys.size;
+  syncBtn.style.display = n ? '' : 'none';
+  syncBtn.textContent = n ? ('Sync ' + n + ' delete' + (n === 1 ? '' : 's') + ' to GitHub') : 'Sync deletes to GitHub';
+}
 function applyDeletedState(){
   document.querySelectorAll('#t tr[data-key]').forEach(r => {
-    if (r.dataset.deleted !== 'true') {
-      r.dataset.deleted = deletedKeys.has(r.dataset.key) ? 'true' : 'false';
-    }
+    const key = r.dataset.key;
+    r.dataset.deleted = r.dataset.baked === 'true'
+      ? (restoreKeys.has(key) ? 'false' : 'true')
+      : (deletedKeys.has(key) ? 'true' : 'false');
   });
+  updateSyncButton();
 }
 applyDeletedState();
 
@@ -252,16 +263,32 @@ document.getElementById('t').addEventListener('click', e => {
       ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
     }
   } else if (act === 'delete') {
-    // Instant local hide, then the link still opens the GitHub issue in a
-    // new tab (not prevented) — submitting it is what makes this permanent.
-    deletedKeys.add(b.dataset.key); saveDeleted(deletedKeys);
-    const row = b.closest('tr'); if (row) row.dataset.deleted = 'true';
-    run();
+    const row = b.closest('tr'); const key = b.dataset.key;
+    if (row && row.dataset.baked !== 'true') { deletedKeys.add(key); saveSet(DELETED_KEY, deletedKeys); }
+    if (restoreKeys.has(key)) { restoreKeys.delete(key); saveSet(RESTORE_KEY, restoreKeys); }
+    if (row) row.dataset.deleted = 'true';
+    updateSyncButton(); run();
   } else if (act === 'restore') {
-    deletedKeys.delete(b.dataset.key); saveDeleted(deletedKeys);
-    const row = b.closest('tr'); if (row) row.dataset.deleted = 'false';
-    run();
+    const row = b.closest('tr'); const key = b.dataset.key;
+    if (deletedKeys.has(key)) { deletedKeys.delete(key); saveSet(DELETED_KEY, deletedKeys); }
+    if (row && row.dataset.baked === 'true') { restoreKeys.add(key); saveSet(RESTORE_KEY, restoreKeys); }
+    if (row) row.dataset.deleted = 'false';
+    updateSyncButton(); run();
   }
+});
+
+syncBtn.addEventListener('click', () => {
+  const n = deletedKeys.size + restoreKeys.size;
+  if (!n) return;
+  const title = '[batch-delete-restore] ' + deletedKeys.size + ' delete, ' + restoreKeys.size + ' restore';
+  const body = [
+    'Action: batch-delete-restore',
+    'Delete keys: ' + [...deletedKeys].join(', '),
+    'Restore keys: ' + [...restoreKeys].join(', '),
+  ].join('\\n');
+  const url = 'https://github.com/generalsubs101-hub/job-application-tracker/issues/new?title='
+    + encodeURIComponent(title) + '&body=' + encodeURIComponent(body) + '&labels=claude-action';
+  window.open(url, '_blank', 'noopener');
 });
 </script>
 </body>
