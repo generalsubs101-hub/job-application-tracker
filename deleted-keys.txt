@@ -1,0 +1,5 @@
+# One job key per line (LinkedIn Job ID, or company|title lowercase if no ID).
+# Rows listed here are baked as deleted in docs/index.html at build time —
+# this is the durable, cross-device, cross-browser record. Edited via chat
+# ("permanently delete ...") so it's committed, not left in a browser's
+# localStorage where a private window or another device would never see it.

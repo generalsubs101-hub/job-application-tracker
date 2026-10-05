@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const logPath = path.join(__dirname, 'applications-log.md');
+const deletedKeysPath = path.join(__dirname, 'deleted-keys.txt');
 const outDir = path.join(__dirname, 'docs');
 const now = new Date();
 const today = process.argv[2] ||
@@ -26,6 +27,20 @@ const dedupeKey = r => r.id || `${r.company.toLowerCase()}|${r.title.toLowerCase
 const latestByKey = new Map();
 rows.forEach(r => latestByKey.set(dedupeKey(r), r));
 const displayRows = Array.from(latestByKey.values());
+
+// Durable, cross-device deletes: a job key listed here is baked as deleted
+// directly into the HTML at build time, so it stays hidden in a private
+// window or on another device — not dependent on any one browser's
+// localStorage. Edited via chat, then committed.
+let bakedDeleted = new Set();
+try {
+  bakedDeleted = new Set(
+    fs.readFileSync(deletedKeysPath, 'utf8')
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'))
+  );
+} catch {}
 
 const isApplied = s => /^applied/i.test(s);
 const isAttention = s => /^(needs-account|draft-needs-attach|inprogress|failed)/i.test(s);
@@ -80,15 +95,17 @@ const actions = r => {
   if (lp) {
     btns.push(`<button class="act" data-act="copy-letter" data-letter="${esc(lp)}">Copy cover letter</button>`);
   }
-  // Delete/restore state lives in the viewer's browser only (localStorage) —
-  // this page has no backend, so it can't write back to applications-log.md.
-  // Both buttons are always rendered; CSS shows only the one matching the
-  // row's current data-deleted state, toggled by the click handler below.
-  btns.push(`<button class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}">Delete</button>`);
-  btns.push(`<button class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}">Restore</button>`);
+  // Delete/restore gives instant feedback via localStorage (this browser,
+  // right now) AND copies a prompt to make it permanent: pasted into Claude
+  // Code, it edits deleted-keys.txt and commits, so the row stays hidden
+  // across private windows and other devices too, not just this one.
+  const deletePrompt = `Permanently delete this job from the tracker: ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Add its key to deleted-keys.txt and push.`;
+  const restorePrompt = `Restore this job in the tracker: ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Remove its key from deleted-keys.txt and push.`;
+  btns.push(`<button class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}" data-prompt="${esc(deletePrompt)}" title="Hides it now, copies a prompt to make it permanent">Delete</button>`);
+  btns.push(`<button class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}" data-prompt="${esc(restorePrompt)}" title="Unhides it now, copies a prompt to make it permanent">Restore</button>`);
   return btns.join(' ');
 };
-const tr = r => `<tr data-day="${r.date === today ? 'today' : 'old'}" data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-key="${esc(dedupeKey(r))}" data-deleted="false" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
+const tr = r => `<tr data-day="${r.date === today ? 'today' : 'old'}" data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-key="${esc(dedupeKey(r))}" data-deleted="${bakedDeleted.has(dedupeKey(r)) ? 'true' : 'false'}" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
 <td data-label="Company">${esc(r.company)}</td><td data-label="Job">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}</td>
 <td data-label="Location">${esc(r.location)}</td><td data-label="Method">${esc(r.method)}</td><td class="m" data-label="Matched CV points">${esc(r.matched)}</td><td data-label="Status">${badge(r.status)}</td><td class="act-cell" data-label="Actions"><div class="act-wrap">${actions(r)}</div></td></tr>`;
 
@@ -172,16 +189,20 @@ footer{margin-top:20px;font-size:12px;opacity:.6}
 const LETTERS = ${JSON.stringify(letterContents).replace(/</g, '\\u003c')};
 const q=document.getElementById('q'),f=document.getElementById('f'),d=document.getElementById('d');
 
-// Delete is per-browser only (localStorage) — this static page has no
-// backend to write back to applications-log.md, so a delete here never
-// removes the job from the log, it just hides the row for this viewer.
+// Each row's data-deleted starts from deleted-keys.txt, baked in at build
+// time (durable, same on every device/browser). localStorage only adds
+// *instant* local hides on top of that, for the gap before a delete prompt
+// gets pasted to Claude Code and actually committed — it can mark a row
+// deleted early, but it can never un-delete one the build already baked in.
 const DELETED_KEY = 'jobTrackerDeletedKeys';
 function loadDeleted(){ try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); } catch { return new Set(); } }
 function saveDeleted(set){ try { localStorage.setItem(DELETED_KEY, JSON.stringify([...set])); } catch {} }
 let deletedKeys = loadDeleted();
 function applyDeletedState(){
   document.querySelectorAll('#t tr[data-key]').forEach(r => {
-    r.dataset.deleted = deletedKeys.has(r.dataset.key) ? 'true' : 'false';
+    if (r.dataset.deleted !== 'true') {
+      r.dataset.deleted = deletedKeys.has(r.dataset.key) ? 'true' : 'false';
+    }
   });
 }
 applyDeletedState();
@@ -214,9 +235,13 @@ document.getElementById('t').addEventListener('click', e => {
   } else if (act === 'copy-prompt') {
     copyToClipboard(b.dataset.prompt || '');
   } else if (act === 'delete') {
-    deletedKeys.add(b.dataset.key); saveDeleted(deletedKeys); applyDeletedState(); run();
+    deletedKeys.add(b.dataset.key); saveDeleted(deletedKeys);
+    const row = b.closest('tr'); if (row) row.dataset.deleted = 'true';
+    copyToClipboard(b.dataset.prompt || ''); run();
   } else if (act === 'restore') {
-    deletedKeys.delete(b.dataset.key); saveDeleted(deletedKeys); applyDeletedState(); run();
+    deletedKeys.delete(b.dataset.key); saveDeleted(deletedKeys);
+    const row = b.closest('tr'); if (row) row.dataset.deleted = 'false';
+    copyToClipboard(b.dataset.prompt || ''); run();
   }
 });
 </script>
