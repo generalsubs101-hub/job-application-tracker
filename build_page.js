@@ -89,7 +89,8 @@ const actions = r => {
     btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(fixCvPrompt)}" title="Copies a prompt — paste into Claude Code">Fix CV for this</button>`);
   }
   if (isAttention(r.status)) {
-    btns.push(`<button class="act" data-act="open" data-url="${esc(r.url)}">Retry (open)</button>`);
+    const retryPrompt = `Retry applying to ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Previous attempt status: ${r.status}.`;
+    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(retryPrompt)}" title="Copies a prompt — paste into Claude Code">Retry</button>`);
   }
   const lp = letterPathByKey.get(dedupeKey(r)) || letterPathOf(r.matched);
   if (lp) {
