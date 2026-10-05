@@ -76,34 +76,52 @@ const badge = s => {
   const cls = isApplied(s) ? 'ok' : isAttention(s) ? 'warn' : 'skip';
   return `<span class="b ${cls}">${esc(s)}</span>`;
 };
-// This page is static (GitHub Pages, no live Claude session to message), so
-// action buttons copy a ready-made prompt to the clipboard instead of calling
-// sendPrompt — paste it into Claude Code to act on it.
+
+// This page is static (GitHub Pages, no backend of its own), so these
+// buttons file a GitHub Issue — the repo's own, already-authenticated
+// system — instead of calling anything that would need an exposed
+// credential. process-tracker-actions (a scheduled Claude Code task on
+// Momen's machine) polls issues labeled claude-action every 15 minutes,
+// executes the real action (apply, CV review, retry, delete/restore),
+// then closes the issue. No copy/paste into chat required — one click
+// here, one native "Submit new issue" click on GitHub, and it runs.
+const REPO = 'generalsubs101-hub/job-application-tracker';
+const issueUrl = (action, r, extra) => {
+  const title = `[${action}] ${r.company} - ${r.title}`;
+  const body = [
+    `Action: ${action}`,
+    `Job ID: ${r.id || ''}`,
+    `Company: ${r.company}`,
+    `Title: ${r.title}`,
+    `URL: ${r.url || ''}`,
+    extra || '',
+  ].join('\n');
+  const qs = `title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=claude-action`;
+  return `https://github.com/${REPO}/issues/new?${qs}`;
+};
+const issueLink = (label, action, r, extra) =>
+  `<a class="act" href="${esc(issueUrl(action, r, extra))}" target="_blank" rel="noopener" title="Opens a prefilled GitHub issue — submit it and Claude Code picks it up within ~15 min">${esc(label)}</a>`;
 const actions = r => {
   const btns = [];
   if (r.url) btns.push(`<button class="act" data-act="open" data-url="${esc(r.url)}">Open job</button>`);
   if (isNotFit(r.status)) {
-    const applyPrompt = `Apply anyway to ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. I reviewed the skip reason (${r.matched}) and want to proceed despite it.`;
-    const fixCvPrompt = `Review my CV against the ${r.company} - ${r.title} posting (${r.url}). It was skipped for this gap: ${r.matched}. Tell me what is missing and ask me what is true before adding anything to the CV.`;
-    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(applyPrompt)}" title="Copies a prompt — paste into Claude Code">Apply anyway</button>`);
-    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(fixCvPrompt)}" title="Copies a prompt — paste into Claude Code">Fix CV for this</button>`);
+    btns.push(issueLink('Apply anyway', 'apply-anyway', r, `Context: ${r.matched}`));
+    btns.push(issueLink('Fix CV for this', 'fix-cv', r, `Gap: ${r.matched}`));
   }
   if (isAttention(r.status)) {
-    const retryPrompt = `Retry applying to ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Previous attempt status: ${r.status}.`;
-    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(retryPrompt)}" title="Copies a prompt — paste into Claude Code">Retry</button>`);
+    btns.push(issueLink('Retry', 'retry', r, `Previous status: ${r.status}`));
   }
   const lp = letterPathByKey.get(dedupeKey(r)) || letterPathOf(r.matched);
   if (lp) {
     btns.push(`<button class="act" data-act="copy-letter" data-letter="${esc(lp)}">Copy cover letter</button>`);
   }
-  // Delete/restore gives instant feedback via localStorage (this browser,
-  // right now) AND copies a prompt to make it permanent: pasted into Claude
-  // Code, it edits deleted-keys.txt and commits, so the row stays hidden
-  // across private windows and other devices too, not just this one.
-  const deletePrompt = `Permanently delete this job from the tracker: ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Add its key to deleted-keys.txt and push.`;
-  const restorePrompt = `Restore this job in the tracker: ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Remove its key from deleted-keys.txt and push.`;
-  btns.push(`<button class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}" data-prompt="${esc(deletePrompt)}" title="Hides it now, copies a prompt to make it permanent">Delete</button>`);
-  btns.push(`<button class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}" data-prompt="${esc(restorePrompt)}" title="Unhides it now, copies a prompt to make it permanent">Restore</button>`);
+  // Delete/restore hides the row instantly in this browser (localStorage,
+  // via the click handler below, before the link navigates) AND files the
+  // same kind of issue, so process-tracker-actions makes it permanent
+  // (edits deleted-keys.txt, commits, pushes) — durable across private
+  // windows and other devices, not just this one.
+  btns.push(`<a class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}" href="${esc(issueUrl('delete', r))}" target="_blank" rel="noopener" title="Hides it now; files a GitHub issue to make it permanent">Delete</a>`);
+  btns.push(`<a class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}" href="${esc(issueUrl('restore', r))}" target="_blank" rel="noopener" title="Unhides it now; files a GitHub issue to make it permanent">Restore</a>`);
   return btns.join(' ');
 };
 const tr = r => `<tr data-day="${r.date === today ? 'today' : 'old'}" data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-key="${esc(dedupeKey(r))}" data-deleted="${bakedDeleted.has(dedupeKey(r)) ? 'true' : 'false'}" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
@@ -149,9 +167,9 @@ col.c-company{width:13%}col.c-job{width:15%}col.c-loc{width:11%}col.c-method{wid
 a{color:inherit}
 td.act-cell{vertical-align:middle;text-align:center}
 .act-wrap{display:flex;flex-direction:column;gap:4px;align-items:center;width:100%}
-button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal}
-button.act:hover{background:var(--surface-1)}
-button.act:active{transform:scale(0.98)}
+.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal;display:block;text-decoration:none;text-align:center;box-sizing:border-box}
+.act:hover{background:var(--surface-1)}
+.act:active{transform:scale(0.98)}
 tr[data-deleted="false"] .act-restore{display:none}
 tr[data-deleted="true"] .act-delete{display:none}
 tr[data-deleted="true"] .act-restore{border-color:var(--text-success);color:var(--text-success)}
@@ -217,10 +235,15 @@ r.style.display=ok?'':'none';});}
 [q,f,d].forEach(e=>e.addEventListener('input',run));run();
 
 document.getElementById('t').addEventListener('click', e => {
-  const b = e.target.closest('button.act');
+  const b = e.target.closest('.act');
   if (!b) return;
   const act = b.dataset.act;
-  const copyToClipboard = text => {
+  if (act === 'open') {
+    e.preventDefault();
+    if (b.dataset.url) window.open(b.dataset.url, '_blank', 'noopener');
+  } else if (act === 'copy-letter') {
+    e.preventDefault();
+    const text = LETTERS[b.dataset.letter] || '';
     const done = () => { const old = b.textContent; b.textContent = 'Copied'; setTimeout(() => b.textContent = old, 1500); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(done);
@@ -228,21 +251,16 @@ document.getElementById('t').addEventListener('click', e => {
       const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
       ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
     }
-  };
-  if (act === 'open') {
-    if (b.dataset.url) window.open(b.dataset.url, '_blank', 'noopener');
-  } else if (act === 'copy-letter') {
-    copyToClipboard(LETTERS[b.dataset.letter] || '');
-  } else if (act === 'copy-prompt') {
-    copyToClipboard(b.dataset.prompt || '');
   } else if (act === 'delete') {
+    // Instant local hide, then the link still opens the GitHub issue in a
+    // new tab (not prevented) — submitting it is what makes this permanent.
     deletedKeys.add(b.dataset.key); saveDeleted(deletedKeys);
     const row = b.closest('tr'); if (row) row.dataset.deleted = 'true';
-    copyToClipboard(b.dataset.prompt || ''); run();
+    run();
   } else if (act === 'restore') {
     deletedKeys.delete(b.dataset.key); saveDeleted(deletedKeys);
     const row = b.closest('tr'); if (row) row.dataset.deleted = 'false';
-    copyToClipboard(b.dataset.prompt || ''); run();
+    run();
   }
 });
 </script>
