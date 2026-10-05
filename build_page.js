@@ -81,10 +81,9 @@ const actions = r => {
     btns.push(`<button class="act" data-act="copy-letter" data-letter="${esc(lp)}">Copy cover letter</button>`);
   }
   // Delete/restore state lives in the viewer's browser only (localStorage) —
-  // this static page has no backend, so it can't write back to
-  // applications-log.md. Both buttons are always rendered; CSS shows only
-  // the one matching the row's current data-deleted state (toggled by the
-  // click handler below).
+  // this page has no backend, so it can't write back to applications-log.md.
+  // Both buttons are always rendered; CSS shows only the one matching the
+  // row's current data-deleted state, toggled by the click handler below.
   btns.push(`<button class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}">Delete</button>`);
   btns.push(`<button class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}">Restore</button>`);
   return btns.join(' ');
@@ -130,14 +129,13 @@ col.c-company{width:13%}col.c-job{width:15%}col.c-loc{width:11%}col.c-method{wid
 .b{padding:2px 8px;border-radius:10px;font-size:12px;display:inline-block}
 .ok{background:var(--bg-success);color:var(--text-success)}.warn{background:var(--bg-warning);color:var(--text-warning)}.skip{background:var(--surface-1);color:var(--text-secondary)}
 a{color:inherit}
-.act-cell{display:flex;flex-direction:column;gap:4px;align-items:stretch}
-button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal;text-align:center}
+.act-cell{display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;height:100%}
+button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal}
 button.act:hover{background:var(--surface-1)}
 button.act:active{transform:scale(0.98)}
-button.act-delete:hover{background:#ef4444;border-color:#ef4444;color:#fff}
-button.act-restore:hover{background:#16a34a;border-color:#16a34a;color:#fff}
 tr[data-deleted="false"] .act-restore{display:none}
 tr[data-deleted="true"] .act-delete{display:none}
+tr[data-deleted="true"] .act-restore{border-color:var(--text-success);color:var(--text-success)}
 footer{margin-top:20px;font-size:12px;opacity:.6}
 @media (max-width:720px){
   table{min-width:0}
@@ -196,7 +194,7 @@ r.style.display=ok?'':'none';});}
 [q,f,d].forEach(e=>e.addEventListener('input',run));run();
 
 document.getElementById('t').addEventListener('click', e => {
-  const b = e.target.closest('button[data-act]');
+  const b = e.target.closest('button.act');
   if (!b) return;
   const act = b.dataset.act;
   const copyToClipboard = text => {
