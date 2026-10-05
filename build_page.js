@@ -40,12 +40,20 @@ const letterPathOf = matched => {
   const m = matched.match(letterRe);
   return m ? m[1] : null;
 };
+// A letter written on an earlier run must stay attached to a job even after a
+// later retry row overwrites its "matched" text without repeating the
+// reference, so this is keyed by job (dedupeKey), scanning ALL rows, not just
+// each job's latest row.
+const letterPathByKey = new Map();
 rows.forEach(r => {
   const lp = letterPathOf(r.matched);
-  if (lp && !(lp in letterContents)) {
-    const abs = path.join(__dirname, lp.replace(/^letters\//, 'letters' + path.sep));
-    try { letterContents[lp] = fs.readFileSync(abs, 'utf8'); }
-    catch { letterContents[lp] = ''; }
+  if (lp) {
+    letterPathByKey.set(dedupeKey(r), lp);
+    if (!(lp in letterContents)) {
+      const abs = path.join(__dirname, lp.replace(/^letters\//, 'letters' + path.sep));
+      try { letterContents[lp] = fs.readFileSync(abs, 'utf8'); }
+      catch { letterContents[lp] = ''; }
+    }
   }
 });
 
@@ -65,11 +73,10 @@ const actions = r => {
     btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(applyPrompt)}" title="Copies a prompt — paste into Claude Code">Apply anyway</button>`);
     btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(fixCvPrompt)}" title="Copies a prompt — paste into Claude Code">Fix CV for this</button>`);
   }
-  if (isFailed(r.status)) {
-    const retryPrompt = `Retry applying to ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Previous attempt status: ${r.status}.`;
-    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(retryPrompt)}" title="Copies a prompt — paste into Claude Code">Retry</button>`);
+  if (isAttention(r.status)) {
+    btns.push(`<button class="act" data-act="open" data-url="${esc(r.url)}">Retry (open)</button>`);
   }
-  const lp = letterPathOf(r.matched);
+  const lp = letterPathByKey.get(dedupeKey(r)) || letterPathOf(r.matched);
   if (lp) {
     btns.push(`<button class="act" data-act="copy-letter" data-letter="${esc(lp)}">Copy cover letter</button>`);
   }
