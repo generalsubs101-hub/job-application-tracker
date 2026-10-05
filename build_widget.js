@@ -79,7 +79,7 @@ const actions = r => {
 };
 const tr = r => `<tr data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
 <td data-label="Company">${esc(r.company)}</td><td data-label="Job">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}</td>
-<td data-label="Location">${esc(r.location)}</td><td data-label="Method">${esc(r.method)}</td><td class="m" data-label="Matched CV points">${esc(r.matched)}</td><td data-label="Status">${badge(r.status)}</td><td class="act-cell" data-label="Actions">${actions(r)}</td></tr>`;
+<td data-label="Location">${esc(r.location)}</td><td data-label="Method">${esc(r.method)}</td><td class="m" data-label="Matched CV points">${esc(r.matched)}</td><td data-label="Status">${badge(r.status)}</td><td class="act-cell" data-label="Actions"><div class="act-wrap">${actions(r)}</div></td></tr>`;
 
 const html = `<style>
 .w{font:14px/1.4 system-ui,sans-serif;color:var(--text-primary)}
@@ -99,7 +99,8 @@ col.c-company{width:13%}col.c-job{width:15%}col.c-loc{width:11%}col.c-method{wid
 .b{padding:2px 8px;border-radius:10px;font-size:12px;display:inline-block}
 .ok{background:var(--bg-success);color:var(--text-success)}.warn{background:var(--bg-warning);color:var(--text-warning)}.skip{background:var(--surface-1);color:var(--text-secondary)}
 a{color:inherit}
-.act-cell{display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;height:100%}
+td.act-cell{vertical-align:middle;text-align:center}
+.act-wrap{display:flex;flex-direction:column;gap:4px;align-items:center;width:100%}
 button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal}
 button.act:hover{background:var(--surface-1)}
 button.act:active{transform:scale(0.98)}
