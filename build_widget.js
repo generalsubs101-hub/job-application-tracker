@@ -99,8 +99,8 @@ col.c-company{width:13%}col.c-job{width:15%}col.c-loc{width:11%}col.c-method{wid
 .b{padding:2px 8px;border-radius:10px;font-size:12px;display:inline-block}
 .ok{background:var(--bg-success);color:var(--text-success)}.warn{background:var(--bg-warning);color:var(--text-warning)}.skip{background:var(--surface-1);color:var(--text-secondary)}
 a{color:inherit}
-.act-cell{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
-button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal}
+.act-cell{display:flex;flex-direction:column;gap:4px;align-items:stretch}
+button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal;text-align:center}
 button.act:hover{background:var(--surface-1)}
 button.act:active{transform:scale(0.98)}
 @media (max-width:720px){
