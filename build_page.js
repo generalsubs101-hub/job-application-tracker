@@ -80,19 +80,17 @@ const actions = r => {
   if (lp) {
     btns.push(`<button class="act" data-act="copy-letter" data-letter="${esc(lp)}">Copy cover letter</button>`);
   }
+  // Delete/restore state lives in the viewer's browser only (localStorage) —
+  // this static page has no backend, so it can't write back to
+  // applications-log.md. Both buttons are always rendered; CSS shows only
+  // the one matching the row's current data-deleted state (toggled by the
+  // click handler below).
+  btns.push(`<button class="act act-delete" data-act="delete" data-key="${esc(dedupeKey(r))}">Delete</button>`);
+  btns.push(`<button class="act act-restore" data-act="restore" data-key="${esc(dedupeKey(r))}">Restore</button>`);
   return btns.join(' ');
 };
-// Delete/restore state lives in the viewer's browser only (localStorage) —
-// this static page has no backend, so it can't write back to
-// applications-log.md. Both icon buttons are always rendered; CSS shows only
-// the one matching the row's current data-deleted state (toggled by the
-// click handler below).
-const delCell = r => `<td class="del-cell">
-<button class="icon-btn icon-delete" data-act="delete" data-key="${esc(dedupeKey(r))}" title="Delete" aria-label="Delete">&#8722;</button>
-<button class="icon-btn icon-restore" data-act="restore" data-key="${esc(dedupeKey(r))}" title="Restore" aria-label="Restore">&#8635;</button>
-</td>`;
 const tr = r => `<tr data-day="${r.date === today ? 'today' : 'old'}" data-status="${isApplied(r.status) ? 'applied' : isAttention(r.status) ? 'attention' : 'skipped'}" data-key="${esc(dedupeKey(r))}" data-deleted="false" data-q="${esc((r.company + ' ' + r.title + ' ' + r.location + ' ' + r.matched).toLowerCase())}">
-${delCell(r)}<td data-label="Company">${esc(r.company)}</td><td data-label="Job">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}</td>
+<td data-label="Company">${esc(r.company)}</td><td data-label="Job">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}</td>
 <td data-label="Location">${esc(r.location)}</td><td data-label="Method">${esc(r.method)}</td><td class="m" data-label="Matched CV points">${esc(r.matched)}</td><td data-label="Status">${badge(r.status)}</td><td class="act-cell" data-label="Actions">${actions(r)}</td></tr>`;
 
 const html = `<!doctype html>
@@ -127,7 +125,7 @@ h1{font-size:20px;margin:0 0 4px}
 table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:720px}
 th,td{text-align:left;padding:8px;border-bottom:1px solid var(--border);vertical-align:top;overflow-wrap:break-word}
 th{font-size:12px;opacity:.7}
-col.c-del{width:32px}col.c-company{width:13%}col.c-job{width:15%}col.c-loc{width:11%}col.c-method{width:9%}col.c-matched{width:25%}col.c-status{width:15%}col.c-act{width:12%}
+col.c-company{width:13%}col.c-job{width:15%}col.c-loc{width:11%}col.c-method{width:9%}col.c-matched{width:25%}col.c-status{width:15%}col.c-act{width:12%}
 .m{font-size:12px}
 .b{padding:2px 8px;border-radius:10px;font-size:12px;display:inline-block}
 .ok{background:var(--bg-success);color:var(--text-success)}.warn{background:var(--bg-warning);color:var(--text-warning)}.skip{background:var(--surface-1);color:var(--text-secondary)}
@@ -136,14 +134,10 @@ a{color:inherit}
 button.act{font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:inherit;cursor:pointer;width:100%;white-space:normal;text-align:center}
 button.act:hover{background:var(--surface-1)}
 button.act:active{transform:scale(0.98)}
-.del-cell{padding:8px 4px;text-align:center}
-.icon-btn{width:22px;height:22px;border-radius:50%;border:none;cursor:pointer;font-size:14px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0}
-.icon-delete{background:#ef4444;color:#fff}
-.icon-delete:hover{background:#dc2626}
-.icon-restore{background:#16a34a;color:#fff}
-.icon-restore:hover{background:#15803d}
-tr[data-deleted="false"] .icon-restore{display:none}
-tr[data-deleted="true"] .icon-delete{display:none}
+button.act-delete:hover{background:#ef4444;border-color:#ef4444;color:#fff}
+button.act-restore:hover{background:#16a34a;border-color:#16a34a;color:#fff}
+tr[data-deleted="false"] .act-restore{display:none}
+tr[data-deleted="true"] .act-delete{display:none}
 footer{margin-top:20px;font-size:12px;opacity:.6}
 @media (max-width:720px){
   table{min-width:0}
@@ -151,13 +145,12 @@ footer{margin-top:20px;font-size:12px;opacity:.6}
   colgroup{display:none}
   table,thead,tbody,tr{display:block;width:100%}
   thead{display:none}
-  #t tr{border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:6px 8px;position:relative}
+  #t tr{border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:6px 8px}
   td{display:flex;gap:8px;padding:4px 0;border-bottom:none;width:auto}
   td::before{content:attr(data-label);flex:0 0 42%;font-size:11px;opacity:.65;font-weight:600}
   td.act-cell{flex-direction:column}
   td.act-cell::before{flex:none;margin-bottom:4px}
   .act-cell{width:100%}
-  td.del-cell{position:absolute;top:6px;right:6px;padding:0;width:auto}
 }
 </style>
 </head>
@@ -172,8 +165,8 @@ footer{margin-top:20px;font-size:12px;opacity:.6}
 <div class="stat"><b>${todayRows.length}</b>reviewed today</div>
 </div>
 <div class="bar"><input id="q" placeholder="Search company, title, location..."><select id="f"><option value="">All statuses</option><option value="applied">Applied</option><option value="attention">Needs attention</option><option value="skipped">Skipped</option><option value="deleted">Deleted</option></select><select id="d"><option value="all">All runs</option><option value="today">Today</option></select></div>
-<div class="tw"><table><colgroup><col class="c-del"><col class="c-company"><col class="c-job"><col class="c-loc"><col class="c-method"><col class="c-matched"><col class="c-status"><col class="c-act"></colgroup><thead><tr><th></th><th>Company</th><th>Job</th><th>Location</th><th>Method</th><th>Matched CV points</th><th>Status</th><th>Actions</th></tr></thead>
-<tbody id="t">${displayRows.slice().reverse().map(tr).join('\n') || '<tr><td colspan="8">No applications logged yet.</td></tr>'}</tbody></table></div>
+<div class="tw"><table><colgroup><col class="c-company"><col class="c-job"><col class="c-loc"><col class="c-method"><col class="c-matched"><col class="c-status"><col class="c-act"></colgroup><thead><tr><th>Company</th><th>Job</th><th>Location</th><th>Method</th><th>Matched CV points</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody id="t">${displayRows.slice().reverse().map(tr).join('\n') || '<tr><td colspan="7">No applications logged yet.</td></tr>'}</tbody></table></div>
 <footer>Generated by build_page.js from applications-log.md. Rebuilt daily.</footer>
 </div>
 <script>
