@@ -53,11 +53,21 @@ const badge = s => {
   const cls = isApplied(s) ? 'ok' : isAttention(s) ? 'warn' : 'skip';
   return `<span class="b ${cls}">${esc(s)}</span>`;
 };
+// This page is static (GitHub Pages, no live Claude session to message), so
+// action buttons copy a ready-made prompt to the clipboard instead of calling
+// sendPrompt — paste it into Claude Code to act on it.
 const actions = r => {
   const btns = [];
   if (r.url) btns.push(`<button class="act" data-act="open" data-url="${esc(r.url)}">Open job</button>`);
+  if (isNotFit(r.status)) {
+    const applyPrompt = `Apply anyway to ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. I reviewed the skip reason (${r.matched}) and want to proceed despite it.`;
+    const fixCvPrompt = `Review my CV against the ${r.company} - ${r.title} posting (${r.url}). It was skipped for this gap: ${r.matched}. Tell me what is missing and ask me what is true before adding anything to the CV.`;
+    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(applyPrompt)}" title="Copies a prompt — paste into Claude Code">Apply anyway</button>`);
+    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(fixCvPrompt)}" title="Copies a prompt — paste into Claude Code">Fix CV for this</button>`);
+  }
   if (isFailed(r.status)) {
-    btns.push(`<button class="act" data-act="open" data-url="${esc(r.url)}">Retry (open)</button>`);
+    const retryPrompt = `Retry applying to ${r.company} - ${r.title} (Job ID ${r.id}): ${r.url}. Previous attempt status: ${r.status}.`;
+    btns.push(`<button class="act" data-act="copy-prompt" data-prompt="${esc(retryPrompt)}" title="Copies a prompt — paste into Claude Code">Retry</button>`);
   }
   const lp = letterPathOf(r.matched);
   if (lp) {
@@ -153,10 +163,7 @@ document.getElementById('t').addEventListener('click', e => {
   const b = e.target.closest('button.act');
   if (!b) return;
   const act = b.dataset.act;
-  if (act === 'open') {
-    if (b.dataset.url) window.open(b.dataset.url, '_blank', 'noopener');
-  } else if (act === 'copy-letter') {
-    const text = LETTERS[b.dataset.letter] || '';
+  const copyToClipboard = text => {
     const done = () => { const old = b.textContent; b.textContent = 'Copied'; setTimeout(() => b.textContent = old, 1500); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(done);
@@ -164,6 +171,13 @@ document.getElementById('t').addEventListener('click', e => {
       const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
       ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
     }
+  };
+  if (act === 'open') {
+    if (b.dataset.url) window.open(b.dataset.url, '_blank', 'noopener');
+  } else if (act === 'copy-letter') {
+    copyToClipboard(LETTERS[b.dataset.letter] || '');
+  } else if (act === 'copy-prompt') {
+    copyToClipboard(b.dataset.prompt || '');
   }
 });
 </script>
